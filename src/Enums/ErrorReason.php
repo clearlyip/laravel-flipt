@@ -1,0 +1,9 @@
+<?php
+
+namespace Clearlyip\LaravelFlipt\Enums;
+
+enum ErrorReason: string
+{
+    case UNKNOWN_ERROR_EVALUATION_REASON = 'UNKNOWN_ERROR_EVALUATION_REASON';
+    case NOT_FOUND_ERROR_EVALUATION_REASON = 'NOT_FOUND_ERROR_EVALUATION_REASON';
+}

@@ -1,0 +1,16 @@
+{
+  "tabWidth": 4,
+  "singleQuote": true,
+  "useTabs": false,
+  "plugins": ["@prettier/plugin-php"],
+  "overrides": [
+      {
+          "files": ["*.php"],
+          "options": {
+              "parser": "php",
+              "trailingCommaPHP": true,
+              "braceStyle": "psr-2"
+          }
+      }
+  ]
+}

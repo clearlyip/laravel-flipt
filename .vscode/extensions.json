@@ -1,0 +1,12 @@
+{
+	"recommendations": [
+		"xdebug.php-debug",
+		"neilbrayfield.php-docblocker",
+		"esbenp.prettier-vscode",
+		"eamodio.gitlens",
+		"bmewburn.vscode-intelephense-client",
+		"ryanluker.vscode-coverage-gutters",
+		"obliviousharmony.vscode-php-codesniffer",
+		"yzhang.markdown-all-in-one"
+	]
+}
