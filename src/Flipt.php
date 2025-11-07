@@ -134,6 +134,7 @@ readonly class Flipt
                     ),
                 },
             )
+            ->allowSuperfluousKeys()
             ->mapper()
             ->map(
                 $signature,
