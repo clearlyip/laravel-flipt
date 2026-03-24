@@ -30,9 +30,10 @@ composer require clearlyip/laravel-flipt
 
 ## Laravel Version Compatibility
 
-| Laravel | Laravel Flipt |
-| :------ | :------------ |
-| 12.x    | 1.x           |
+| Laravel    | Laravel Flipt |
+| :--------- | :------------ |
+| 12.x       | 1.x           |
+| 12.x, 13.x | 2.x           |
 
 ## Usage
 
