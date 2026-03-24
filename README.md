@@ -145,4 +145,4 @@ Contributions are welcome. Please open an issue or pull request on [GitHub](http
 
 ## License
 
-Laravel-flipt is open-sourced software licensed under the [BSD-3-Clause license](LICENSE).
+Laravel-flipt is open-sourced software licensed under the [MIT License](LICENSE).
