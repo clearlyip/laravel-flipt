@@ -1,68 +1,67 @@
 {
-    "name": "clearlyip/laravel-flipt",
-    "description": "A Flipt client for Laravel",
-    "type": "library",
-    "license": "BSD-3-Clause",
-    "authors": [
-        {
-            "name": "Andrew Nagy",
-            "email": "anagy@clearlyip.com"
-        }
-    ],
-    "require": {
-        "php": "^8.4",
-        "laravel/framework": "^12.32.5",
-        "laravel/pennant": "^1.18",
-        "cuyz/valinor": "^2.2.0",
-        "spatie/php-cloneable": "^1.0"
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "Clearlyip\\LaravelFlipt\\ServiceProvider"
-            ]
-        }
-    },
-    "autoload": {
-        "psr-4": {
-            "Clearlyip\\LaravelFlipt\\": "src"
-        }
-    },
-    "require-dev": {
-        "guzzlehttp/psr7": "^2.8.0",
-        "guzzlehttp/guzzle": "^7.10.0",
-        "orchestra/testbench": "^10.4.0",
-        "vimeo/psalm": "^6.13.0",
-        "squizlabs/php_codesniffer": "^3.13.4",
-        "pestphp/pest": "^4.1",
-        "rector/rector": "^2.1.4",
-        "mockery/mockery": "^1.6.12",
-        "brianium/paratest": "^7.11.0",
-        "blastcloud/guzzler": "2.3.0",
-        "vlucas/phpdotenv": "^5.6.2",
-        "symfony/cache": "^7.3.2"
-    },
-    "config": {
-        "allow-plugins": {
-            "php-http/discovery": true,
-            "pestphp/pest-plugin": true
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "CIP\\Tests\\": "tests/",
-            "CIP\\Tools\\": "tools/",
-            "Workbench\\App\\": "workbench/app/",
-            "Workbench\\Database\\Factories\\": "workbench/database/factories/",
-            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
-        }
-    },
-    "scripts": {
-        "test": "XDEBUG_MODE=coverage pest",
-        "psalm": "psalm",
-        "phpcs": "phpcs --standard=phpcs.xml",
-        "phpcbf": "phpcbf --standard=phpcs.xml",
-        "generate:caches": "@php tools/generateCaches.php",
-        "rector": "rector"
+  "name": "clearlyip/laravel-flipt",
+  "description": "A Flipt client for Laravel",
+  "type": "library",
+  "license": "BSD-3-Clause",
+  "authors": [
+    {
+      "name": "Andrew Nagy",
+      "email": "anagy@clearlyip.com"
     }
+  ],
+  "require": {
+    "php": "^8.4",
+    "laravel/framework": "^12.32.5 || ^13.0",
+    "laravel/pennant": "^1.22.0",
+    "spatie/php-cloneable": "^1.0"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Clearlyip\\LaravelFlipt\\ServiceProvider"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Clearlyip\\LaravelFlipt\\": "src"
+    }
+  },
+  "require-dev": {
+    "guzzlehttp/psr7": "^2.9.0",
+    "guzzlehttp/guzzle": "^7.10.0",
+    "orchestra/testbench": "^11.0.0",
+    "vimeo/psalm": "^6.16.0",
+    "pestphp/pest": "^4.4.0",
+    "rector/rector": "^2.3.9",
+    "mockery/mockery": "^1.6.12",
+    "brianium/paratest": "^7.19.0",
+    "blastcloud/guzzler": "2.3.0",
+    "vlucas/phpdotenv": "^5.6.2",
+    "symfony/cache": "^7.3.2 || ^8.0",
+    "carthage-software/mago": "^1.15"
+  },
+  "config": {
+    "allow-plugins": {
+      "php-http/discovery": true,
+      "pestphp/pest-plugin": true
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "CIP\\Tests\\": "tests/",
+      "CIP\\Tools\\": "tools/",
+      "Workbench\\App\\": "workbench/app/",
+      "Workbench\\Database\\Factories\\": "workbench/database/factories/",
+      "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
+    }
+  },
+  "scripts": {
+    "test": "XDEBUG_MODE=coverage pest",
+    "psalm": "psalm",
+    "mago:lint": "mago lint",
+    "mago:format": "mago format",
+    "mago:analyze": "mago analyze",
+    "rector": "rector"
+  }
 }

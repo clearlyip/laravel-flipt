@@ -1,34 +1,35 @@
 {
-	// I recommend to disable VS Code's built-in PHP IntelliSense by setting php.suggest.basic to false to avoid duplicate suggestions.
-	"php.suggest.basic": false,
-	"editor.formatOnSave": true,
-	"[php]": {
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
-	},
-	"workbench.colorCustomizations": {},
-	"taskExplorer.pathToMake": "make",
-	"coverage-gutters.showLineCoverage": true,
-	"coverage-gutters.showRulerCoverage": true,
-	"coverage-gutters.coverageBaseDir": "output/**",
-	"psalm.configPaths": ["psalm.xml"],
-	"psalm.psalmScriptPath": "vendor/bin/psalm-language-server",
-	"psalm.psalmScriptArgs": [
-		"--on-change-debounce-ms=500",
-		"--show-diagnostic-warnings=false"
-	],
-	"phpCodeSniffer.exec.linux": "vendor/bin/phpcs",
-	"phpCodeSniffer.standard": "Custom",
-	"phpCodeSniffer.standardCustom": "phpcs.xml",
-	"php.validate.enable": false,
-	"php.problems.excludeGitIgnore": true,
-	"php.format.codeStyle": "Off",
-	"php.format.rules.forStatementWrap": "off",
-	"php.format.rules.whileStatementNewLineAfterLeftParen": false,
-	"php.problems.exclude": {
-		"/": true
-	},
-	"php.problems.scope": "none",
-	"intelephense.environment.phpVersion": "8.4.0",
-	"prettier.documentSelectors": ["**/*.php", "**/*.json"],
-	"phpunit.phpunit": "vendor/bin/pest"
+  // I recommend to disable VS Code's built-in PHP IntelliSense by setting php.suggest.basic to false to avoid duplicate suggestions.
+  "php.suggest.basic": false,
+  "editor.formatOnSave": true,
+  "[php]": {
+    "editor.defaultFormatter": "jkillian.custom-local-formatters"
+  },
+  "customLocalFormatters.formatters": [
+    {
+      "command": "vendor/bin/mago format --stdin-input",
+      "languages": ["php"]
+    }
+  ],
+  "workbench.colorCustomizations": {},
+  "taskExplorer.pathToMake": "make",
+  "coverage-gutters.showLineCoverage": true,
+  "coverage-gutters.showRulerCoverage": true,
+  "coverage-gutters.coverageBaseDir": "output/**",
+  "psalm.configPaths": ["psalm.xml"],
+  "psalm.psalmScriptPath": "vendor/bin/psalm-language-server",
+  "psalm.psalmScriptArgs": [
+    "--on-change-debounce-ms=500",
+    "--show-diagnostic-warnings=false"
+  ],
+  "php.validate.enable": false,
+  "php.problems.excludeGitIgnore": true,
+  "php.format.codeStyle": "Off",
+  "php.format.rules.forStatementWrap": "off",
+  "php.format.rules.whileStatementNewLineAfterLeftParen": false,
+  "php.problems.exclude": {
+    "/": true
+  },
+  "php.problems.scope": "none",
+  "intelephense.environment.phpVersion": "8.4.0"
 }

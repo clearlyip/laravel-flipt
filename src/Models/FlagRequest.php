@@ -14,28 +14,27 @@ readonly class FlagRequest implements Arrayable
         public string $entityId,
         public array $context = [],
     ) {
-        //
     }
 
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function toArray(): array
     {
         return [
             'entityId' => $this->entityId,
-            'context' => array_map(
-                fn($value) => match (gettype($value)) {
-                    'string' => $value,
-                    'integer' => (string) $value,
-                    'double' => (string) $value,
-                    'boolean' => $value === true ? '1' : '0',
-                    default => throw new \DomainException(
-                        'Unsupported type: ' . gettype($value),
-                    ),
-                },
-                $this->context,
-            ),
+            'context' => array_map(static fn($value) => match (gettype(
+                $value,
+            )) {
+                'string' => $value,
+                'integer' => (string) $value,
+                'double' => (string) $value,
+                'boolean' => $value === true ? '1' : '0',
+                default => throw new \DomainException(
+                    'Unsupported type: ' . gettype($value),
+                ),
+            }, $this->context),
         ];
     }
 
@@ -47,7 +46,9 @@ readonly class FlagRequest implements Arrayable
     public function toBody(): array
     {
         $array = $this->toArray();
-        unset($array['entityId']);
+        if (array_key_exists('entityId', $array)) {
+            unset($array['entityId']);
+        }
         return [
             'context' => [
                 'targetingKey' => $this->entityId,

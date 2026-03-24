@@ -13,6 +13,10 @@ Laravel-flipt was created by, and is maintained by **[Andrew Nagy](https://githu
 - Registers as a driver for [Laravel Pennant](https://github.com/laravel/pennant)
 - Registers a Flipt client class to access the API directly
 - Utilizes Laravel's cache system to store flags in cache for quick access with configurable TTL
+- Supports boolean and variant flag evaluation
+- Supports batch evaluation via the `clientevaluation` API
+- Provides access to Flipt's Environments, Flags, Evaluate, OpenFeature, and Internal APIs
+- Ships with Artisan commands to clear flag caches globally or per user
 
 ## Installation & Usage
 
@@ -34,14 +38,25 @@ composer require clearlyip/laravel-flipt
 
 ### Configuration Files
 
-- Publish the Laravel Flipt configuration file using the `vendor:publish` Artisan command. The `flipt` configuration file will be placed in your `config` directory (Use `--force` to overwrite your existing `clearly` config file):
-    - `php artisan vendor:publish --tag="flipt" [--force]`
+Publish the Laravel Flipt configuration file using the `vendor:publish` Artisan command. The `flipt` configuration file will be placed in your `config` directory (use `--force` to overwrite an existing config file):
 
-All options are fully documented in the configuration file
+```bash
+php artisan vendor:publish --tag="flipt" [--force]
+```
+
+All options are fully documented in the published configuration file.
+
+Key environment variables:
+
+| Variable            | Default | Description            |
+| :------------------ | :------ | :--------------------- |
+| `FLIPT_HOST`        | `null`  | The Flipt API host URL |
+| `FLIPT_NAMESPACE`   | `null`  | The Flipt namespace    |
+| `FLIPT_ENVIRONMENT` | `local` | The Flipt environment  |
 
 ### Pennant
 
-Register the driver for [Laravel Pennant](https://github.com/laravel/pennant) in the `pennant.php` configuration file
+Register the driver for [Laravel Pennant](https://github.com/laravel/pennant) in the `pennant.php` configuration file:
 
 ```php
 'default' => env('PENNANT_STORE', 'flipt'),
@@ -56,11 +71,11 @@ Register the driver for [Laravel Pennant](https://github.com/laravel/pennant) in
 ],
 ```
 
-### User
+### User Identity
 
-Use the [hasFeatures](https://laravel.com/docs/12.x/pennant#the-has-features-trait) trait on your User model
+Use the [hasFeatures](https://laravel.com/docs/12.x/pennant#the-has-features-trait) trait on your User model.
 
-Configure what parameters to use for entityId and context in the flipt configuration file
+Configure what parameters to use for `entityId` and context in the flipt configuration file. Dot notation is supported for nested model attributes:
 
 ```php
 'identity' => [
@@ -72,10 +87,61 @@ Configure what parameters to use for entityId and context in the flipt configura
 ],
 ```
 
-### Accessing
+### Accessing the Flipt Client
 
-The Flipt Class can be accessed through Laravel's Container. The returned class is [https://github.com/clearlyip/laravel-flipt](https://github.com/clearlyip/laravel-flipt)
+The `Flipt` class can be resolved through Laravel's service container:
 
 ```php
+use Clearlyip\LaravelFlipt\Flipt;
+
 $flipt = App::make(Flipt::class);
 ```
+
+The client exposes the following API modules as magic properties:
+
+| Property                   | Class                    | Description                         |
+| :------------------------- | :----------------------- | :---------------------------------- |
+| `$flipt->evaluate`         | `Flipt\Evaluate`         | Boolean and variant flag evaluation |
+| `$flipt->clientevaluation` | `Flipt\ClientEvaluation` | Batch/client-side evaluation        |
+| `$flipt->openfeature`      | `Flipt\OpenFeature`      | OpenFeature-compatible evaluation   |
+| `$flipt->environments`     | `Flipt\Environments`     | Manage Flipt environments           |
+| `$flipt->flags`            | `Flipt\Flags`            | List and retrieve flag definitions  |
+| `$flipt->internal`         | `Flipt\Internal`         | Internal Flipt API access           |
+
+#### Disabling the Cache
+
+To skip the cache for a single call chain, use `withSkipCache()`:
+
+```php
+$flipt->withSkipCache()->evaluate->boolean($request);
+```
+
+### Artisan Commands
+
+| Command                                       | Description                            |
+| :-------------------------------------------- | :------------------------------------- |
+| `php artisan flipt:cache:clear`               | Clear all cached Flipt flag responses  |
+| `php artisan flipt:cache:user:clear {userId}` | Clear cached flags for a specific user |
+
+### Caching
+
+The package uses Laravel's cache system to cache Flipt API responses. Configure the cache behavior in `config/flipt.php`:
+
+```php
+'cache' => [
+    'store'  => env('FLIPT_CACHE_STORE', 'default'),
+    'prefix' => env('FLIPT_CACHE_PREFIX', 'flipt'),
+    'ttl'    => env('FLIPT_CACHE_TTL', 60),
+    'tags'   => ['flipt'],
+],
+```
+
+The cache store must support tagging (e.g., Redis, Memcached) for the cache-clearing commands to work correctly.
+
+## Contributing
+
+Contributions are welcome. Please open an issue or pull request on [GitHub](https://github.com/clearlyip/laravel-flipt).
+
+## License
+
+Laravel-flipt is open-sourced software licensed under the [BSD-3-Clause license](LICENSE).

@@ -11,9 +11,9 @@ use InvalidArgumentException;
 
 readonly class Evaluate
 {
-    public function __construct(public Flipt $client)
-    {
-        //
+    public function __construct(
+        public Flipt $client,
+    ) {
     }
 
     /**
@@ -25,16 +25,21 @@ readonly class Evaluate
      *
      * @throws \JsonException if request or response includes invalid json data
      * @throws \Psr\Http\Client\ClientExceptionInterface if network or request error occurs
+     * @throws \ValueError
+     * @throws \InvalidArgumentException
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \BadMethodCallException
      */
     public function batch(
         array $requests,
         ?string $reference = '',
     ): BatchResponse {
-        $entityIds = array_unique(
-            array_map(fn(EvaluationRequest $v) => $v->entityId, $requests),
-        );
+        $entityIds = array_unique(array_map(
+            static fn(EvaluationRequest $v) => $v->entityId,
+            $requests,
+        ));
 
-        //TODO technically this *could* be supported but not in open feature
+        //TODO(@anagy) technically this *could* be supported but not in open feature
         if (count($entityIds) > 1) {
             throw new InvalidArgumentException(
                 'All requests must have the same entity ID',
@@ -46,18 +51,20 @@ readonly class Evaluate
             path: '/evaluate/v1/batch',
             body: [
                 'requests' => array_map(
-                    fn(EvaluationRequest $request) => $request->toBody(
-                        $this->client->namespace,
-                    ),
+                    fn(EvaluationRequest $request) => $request->toBody($this->client->namespace),
                     $requests,
                 ),
                 'reference' => $reference,
             ],
-            cacheTags: ['flipt.' . $requests[0]->entityId],
+            cacheTags: $requests !== []
+                ? ['flipt.' . $requests[array_key_first($requests)]->entityId]
+                : [],
         );
 
         $body = $this->client->decodeResponse($response);
-        return $this->client->map(BatchResponse::class, $body);
+        /** @var BatchResponse $mappedBatchresponse */
+        $mappedBatchresponse = $this->client->map(BatchResponse::class, $body);
+        return $mappedBatchresponse;
     }
 
     /**
@@ -65,7 +72,12 @@ readonly class Evaluate
      *
      * @param EvaluationRequest $request
      *
-     * @return Boolean The result of the evaluation.
+     * @return \Clearlyip\LaravelFlipt\Models\Boolean The result of the evaluation.
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
     public function boolean(EvaluationRequest $request): Boolean
     {
@@ -77,7 +89,9 @@ readonly class Evaluate
         );
 
         $body = $this->client->decodeResponse($response);
-        return $this->client->map(Boolean::class, $body);
+        /** @var \Clearlyip\LaravelFlipt\Models\Boolean $mappedBoolean */
+        $mappedBoolean = $this->client->map(Boolean::class, $body);
+        return $mappedBoolean;
     }
 
     /**
@@ -86,6 +100,11 @@ readonly class Evaluate
      * @param EvaluationRequest $request
      *
      * @return Variant The result of the evaluation.
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
     public function variant(EvaluationRequest $request): Variant
     {
@@ -97,6 +116,8 @@ readonly class Evaluate
         );
 
         $body = $this->client->decodeResponse($response);
-        return $this->client->map(Variant::class, $body);
+        /** @var Variant $mappedVariant */
+        $mappedVariant = $this->client->map(Variant::class, $body);
+        return $mappedVariant;
     }
 }

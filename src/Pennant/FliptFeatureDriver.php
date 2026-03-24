@@ -10,13 +10,14 @@ use Clearlyip\LaravelFlipt\Models\BooleanResponse;
 use Clearlyip\LaravelFlipt\Models\Error;
 use Clearlyip\LaravelFlipt\Models\ErrorResponse;
 use Clearlyip\LaravelFlipt\Models\EvaluationRequest;
+use Clearlyip\LaravelFlipt\Models\FlagDefinition;
 use Clearlyip\LaravelFlipt\Models\Variant;
 use Clearlyip\LaravelFlipt\Models\VariantResponse;
 use Exception;
-use Laravel\Pennant\Contracts\Driver;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Collection;
 use Laravel\Pennant\Contracts\DefinesFeaturesExternally;
+use Laravel\Pennant\Contracts\Driver;
 
 class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 {
@@ -24,12 +25,13 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
         protected Flipt $client,
         protected Dispatcher $events,
     ) {
-        //
     }
 
     /**
      * {@inheritDoc}
+     * @throws BadMethodCallException
      */
+    #[\Override]
     public function define(string $feature, callable $resolver): void
     {
         throw new BadMethodCallException('Not implemented');
@@ -37,40 +39,59 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
+     *
+     * Returns the keys of all flags defined in the configured Flipt namespace.
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
+    #[\Override]
     public function defined(): array
     {
-        return [];
+        $list = $this->client->flags->list();
+
+        return array_map(
+            static fn(FlagDefinition $flag) => $flag->key,
+            $list->flags,
+        );
     }
 
     /**
      * {@inheritDoc}
+     * @throws Exception
+     * @throws \JsonException
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
+    #[\Override]
     public function getAll(array $features): array
     {
-        $requests = Collection::make($features)
-            ->map(
-                fn($scopes, $feature) => Collection::make($scopes)->map(
-                    fn(
-                        $scope,
-                        $reference,
-                    ): EvaluationRequest => $this->makeEvaluationRequest(
-                        feature: $feature,
-                        scope: $scope,
-                        requestId: (string) $reference,
-                    ),
-                ),
-            )
-            ->flatten();
+        $requests = Collection::make($features)->map(fn(
+            $scopes,
+            $feature,
+        ) => Collection::make($scopes)->map(fn(
+            $scope,
+            $reference,
+        ): EvaluationRequest => $this->makeEvaluationRequest(
+            feature: $feature,
+            scope: $scope,
+            requestId: (string) $reference,
+        )))->flatten();
 
-        $responses = $this->client->evaluate->batch($requests->all())
-            ->responses;
+        /** @var EvaluationRequest[] $requestArray */
+        $requestArray = $requests->all();
+        $responses = $this->client->evaluate->batch($requestArray)->responses;
 
         foreach ($responses as $response) {
             if ($response instanceof ErrorResponse) {
                 $flagKey = $response->errorResponse->flagKey;
-                foreach ($features[$flagKey] as &$flag) {
-                    $flag = $this->getValueFromType($response->errorResponse);
+                foreach (array_keys($features[$flagKey]) as $idx) {
+                    $features[$flagKey][$idx] = $this->getValueFromType($response->errorResponse);
                 }
                 continue;
             }
@@ -78,18 +99,14 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
             if ($response instanceof BooleanResponse) {
                 $flagKey = $response->booleanResponse->flagKey;
                 $requestId = (int) $response->booleanResponse->requestId;
-                $features[$flagKey][$requestId] = $this->getValueFromType(
-                    $response->booleanResponse,
-                );
+                $features[$flagKey][$requestId] = $this->getValueFromType($response->booleanResponse);
                 continue;
             }
 
             if ($response instanceof VariantResponse) {
                 $flagKey = $response->variantResponse->flagKey;
                 $requestId = (int) $response->variantResponse->requestId;
-                $features[$flagKey][$requestId] = $this->getValueFromType(
-                    $response->variantResponse,
-                );
+                $features[$flagKey][$requestId] = $this->getValueFromType($response->variantResponse);
                 continue;
             }
 
@@ -103,31 +120,49 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
+     * @throws Exception
+     * @throws \JsonException
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
+    #[\Override]
     public function get(string $feature, mixed $scope): mixed
     {
         $responses = $this->client->evaluate->batch([
-            $this->makeEvaluationRequest(feature: $feature, scope: $scope),
+            $this->makeEvaluationRequest(
+                feature: $feature,
+                scope: $scope,
+            ),
         ])->responses;
 
-        $response = $responses[0];
+        $response = $responses[0] ?? null;
 
-        return match (get_class($response)) {
-            ErrorResponse::class => $this->getValueFromType(
-                $response->errorResponse,
-            ),
-            BooleanResponse::class => $this->getValueFromType(
-                $response->booleanResponse,
-            ),
-            VariantResponse::class => $this->getValueFromType(
-                $response->variantResponse,
-            ),
-        };
+        if ($response instanceof ErrorResponse) {
+            return $this->getValueFromType($response->errorResponse);
+        }
+
+        if ($response instanceof BooleanResponse) {
+            return $this->getValueFromType($response->booleanResponse);
+        }
+
+        if ($response instanceof VariantResponse) {
+            return $this->getValueFromType($response->variantResponse);
+        }
+
+        throw new Exception(
+            'Unknown response type: '
+            . ($response !== null ? get_class($response) : 'null'),
+        );
     }
 
     /**
      * {@inheritDoc}
+     * @throws BadMethodCallException
      */
+    #[\Override]
     public function set(string $feature, mixed $scope, mixed $value): void
     {
         throw new BadMethodCallException('Not implemented');
@@ -135,7 +170,9 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
+     * @throws BadMethodCallException
      */
+    #[\Override]
     public function setForAllScopes(string $feature, mixed $value): void
     {
         throw new BadMethodCallException('Not implemented');
@@ -143,7 +180,9 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
+     * @throws BadMethodCallException
      */
+    #[\Override]
     public function delete(string $feature, mixed $scope): void
     {
         throw new BadMethodCallException('Not implemented');
@@ -151,18 +190,39 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
+     *
+     * Flushes all cached Flipt evaluation results. Since cache entries are
+     * keyed by entity rather than by feature, the entire Flipt cache is
+     * cleared regardless of which features are requested.
+     * @throws BadMethodCallException
      */
-    public function purge(array|null $features): void
+    #[\Override]
+    public function purge(?array $features): void
     {
-        throw new BadMethodCallException('Not implemented');
+        if ($this->client->shouldCache() && $this->client->cache !== null) {
+            $this->client
+                ->cache
+                ->tags($this->client->getCacheTags())
+                ->flush();
+        }
     }
 
     /**
      * {@inheritDoc}
+     *
+     * Returns the keys of all flags defined in the Flipt namespace. Flag
+     * availability in Flipt is not scope-specific, so the same list is
+     * returned for any scope.
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
      */
+    #[\Override]
     public function definedFeaturesForScope(mixed $scope): array
     {
-        return [];
+        return array_values($this->defined());
     }
 
     /**
@@ -182,11 +242,14 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
      */
     private function makeEvaluationRequest(
         string $feature,
-        $scope,
+        mixed $scope,
         ?string $reference = null,
         ?string $requestId = null,
     ): EvaluationRequest {
-        $identity = config('flipt.identity');
+        /** @var mixed $identityConfig */
+        $identityConfig = config('flipt.identity');
+        /** @var array{identifier: string, context: array<string, string>} $identity */
+        $identity = is_array($identityConfig) ? $identityConfig : [];
 
         if ($scope === null) {
             return new EvaluationRequest(
@@ -198,7 +261,7 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
             );
         }
 
-        $entityId = data_get($scope, $identity['identifier']);
+        $entityId = (string) data_get($scope, $identity['identifier']);
         $contexts = [];
         foreach ($identity['context'] as $context => $attribute) {
             $contexts[$context] = data_get($scope, $attribute);
@@ -223,12 +286,11 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
      * If the response is a Boolean, it will return the enabled property of the
      * response.
      *
-     * If the response is a VariantResponse, it will throw an exception (not
-     * implemented).
+     * If the response is a Variant, it will return the variantAttachment.
      *
      * If the response is of any other type, it will throw an exception.
      *
-     * @param Error|Boolean|Variant $response The response from the Flipt API
+     * @param \Clearlyip\LaravelFlipt\Models\Error|\Clearlyip\LaravelFlipt\Models\Boolean|\Clearlyip\LaravelFlipt\Models\Variant $response The response from the Flipt API
      * @return mixed The value from the response
      * @throws Exception If the response is an Error or a VariantResponse
      */
@@ -236,8 +298,8 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
     {
         if ($response instanceof Error) {
             if (
-                $response->reason ===
-                ErrorReason::NOT_FOUND_ERROR_EVALUATION_REASON
+                $response->reason
+                === ErrorReason::NOT_FOUND_ERROR_EVALUATION_REASON
             ) {
                 return null;
             }
@@ -250,13 +312,6 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
             return $response->enabled;
         }
 
-        /**
-         * @psalm-suppress RedundantCondition
-         */
-        if ($response instanceof Variant) {
-            return $response->variantAttachment;
-        }
-
-        throw new Exception('Unknown response type: ' . get_class($response));
+        return $response->variantAttachment;
     }
 }

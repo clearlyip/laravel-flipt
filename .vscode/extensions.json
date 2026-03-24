@@ -1,12 +1,12 @@
 {
-	"recommendations": [
-		"xdebug.php-debug",
-		"neilbrayfield.php-docblocker",
-		"esbenp.prettier-vscode",
-		"eamodio.gitlens",
-		"bmewburn.vscode-intelephense-client",
-		"ryanluker.vscode-coverage-gutters",
-		"obliviousharmony.vscode-php-codesniffer",
-		"yzhang.markdown-all-in-one"
-	]
+  "recommendations": [
+    "xdebug.php-debug",
+    "neilbrayfield.php-docblocker",
+    "jkillian.custom-local-formatters",
+    "eamodio.gitlens",
+    "bmewburn.vscode-intelephense-client",
+    "ryanluker.vscode-coverage-gutters",
+    "yzhang.markdown-all-in-one",
+    "getpsalm.psalm-vscode-plugin"
+  ]
 }

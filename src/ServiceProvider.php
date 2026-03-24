@@ -5,9 +5,9 @@ namespace Clearlyip\LaravelFlipt;
 use Clearlyip\LaravelFlipt\Commands\CacheClear;
 use Clearlyip\LaravelFlipt\Commands\UserCacheClear;
 use Clearlyip\LaravelFlipt\Pennant\FliptFeatureDriver;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider as LaravelServiceProvider;
 use Laravel\Pennant\Feature;
-use Illuminate\Contracts\Foundation\Application;
 
 class ServiceProvider extends LaravelServiceProvider
 {
@@ -22,21 +22,23 @@ class ServiceProvider extends LaravelServiceProvider
     public function register()
     {
         $this->mergeConfigFrom(self::FLIPT_CONFIG_PATH, 'flipt');
-        $this->app->bind(Flipt::class, function ($app) {
+        $this->app->bind(Flipt::class, static function (Application $app) {
+            /** @var string|null $store */
             $store = config('flipt.cache.store', null);
+            $storeKey = $store === null || $store === 'default' ? null : $store;
 
-            $cacheFactory = $app->make(
-                \Illuminate\Contracts\Cache\Factory::class,
-            );
+            $cacheFactory = $app->make(\Illuminate\Contracts\Cache\Factory::class);
 
-            $cacheProvider = $cacheFactory->store(
-                $store === 'default' ? null : $store,
-            );
+            /** @var \Illuminate\Cache\Repository $cacheProvider */
+            $cacheProvider = $cacheFactory->store($storeKey);
+
+            /** @var string|null $envConfig */
+            $envConfig = config('flipt.environment');
 
             return new Flipt(
-                host: config('flipt.host', ''),
-                namespace: config('flipt.namespace'),
-                environment: config('flipt.environment'),
+                host: (string) config('flipt.host', ''),
+                namespace: (string) config('flipt.namespace', 'default'),
+                environment: is_string($envConfig) ? $envConfig : null,
                 cache: $cacheProvider,
             );
         });
@@ -51,19 +53,16 @@ class ServiceProvider extends LaravelServiceProvider
      */
     public function boot()
     {
-        $this->publishes(
-            [
-                self::FLIPT_CONFIG_PATH => config_path('flipt.php'),
-            ],
-            ['flipt'],
-        );
+        $this->publishes([
+            self::FLIPT_CONFIG_PATH => config_path('flipt.php'),
+        ], ['flipt']);
         $this->loadRoutesFrom(dirname(__DIR__) . '/routes/flipt.php');
 
         Feature::extend(
             'flipt',
             fn(Application $app) => new FliptFeatureDriver(
                 $app->make(Flipt::class),
-                $app->make('events'),
+                $app->make(\Illuminate\Contracts\Events\Dispatcher::class),
             ),
         );
     }

@@ -8,6 +8,17 @@ readonly class Configuration
         public string $name,
         public ConfigurationCapabilities $capabilities,
     ) {
-        //
+    }
+
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            name: (string) ($data['name'] ?? ''),
+            capabilities: ConfigurationCapabilities::fromArray(
+                is_array($data['capabilities'] ?? null)
+                    ? $data['capabilities']
+                    : [],
+            ),
+        );
     }
 }

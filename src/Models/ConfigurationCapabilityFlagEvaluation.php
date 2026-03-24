@@ -8,6 +8,15 @@ readonly class ConfigurationCapabilityFlagEvaluation
         /** @var string[] */
         public array $supportedTypes,
     ) {
-        //
+    }
+
+    public static function fromArray(array $data): self
+    {
+        return new self(supportedTypes: array_map(
+            'strval',
+            is_array($data['supportedTypes'] ?? null)
+                ? $data['supportedTypes']
+                : [],
+        ));
     }
 }

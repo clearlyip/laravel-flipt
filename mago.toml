@@ -1,0 +1,50 @@
+# Welcome to Mago!
+# For full documentation, see https://mago.carthage.software/tools/overview
+php-version = "8.4.0"
+
+[source]
+workspace = "."
+paths = ["config/", "src/", "tests/"]
+includes = ["vendor"]
+excludes = []
+
+[formatter]
+print-width = 80
+single-quote = true
+trailing-comma = true
+control-brace-style = "same-line"
+inline-empty-constructor-braces = false
+inline-empty-classlike-braces = false
+always-break-named-arguments-list = true
+
+
+[linter]
+integrations = ["symfony", "laravel", "phpunit", "pest"]
+excludes = ["tests/"]
+
+[linter.rules]
+ambiguous-function-call = { enabled = false }
+literal-named-argument = { enabled = false }
+halstead = { effort-threshold = 7000 }
+strict-types = { enabled = false }
+excessive-parameter-list = { threshold = 12 }
+inline-variable-return = { enabled = false }
+cyclomatic-complexity = { threshold = 20 }
+too-many-methods = { threshold = 20 }
+kan-defect = { threshold = 2.0 }
+
+[analyzer]
+excludes = ["tests/", "workbench/"]
+plugins = []
+find-unused-definitions = true
+find-unused-expressions = true
+analyze-dead-code = false
+memoize-properties = true
+allow-possibly-undefined-array-keys = false
+check-throws = true
+check-missing-override = true
+find-unused-parameters = true
+strict-list-index-checks = true
+no-boolean-literal-comparison = false
+check-missing-type-hints = false
+register-super-globals = true

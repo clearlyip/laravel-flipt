@@ -30,6 +30,7 @@ class UserCacheClear extends Command
         $flipt = app(Flipt::class);
         $this->info('Clearing the local flipt cache');
 
-        Cache::tags('flipt.' . $this->argument('userId'))->flush();
+        $userId = $this->argument('userId');
+        Cache::tags('flipt.' . (is_string($userId) ? $userId : ''))->flush();
     }
 }

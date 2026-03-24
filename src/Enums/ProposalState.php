@@ -1,0 +1,11 @@
+<?php
+
+namespace Clearlyip\LaravelFlipt\Enums;
+
+enum ProposalState: string
+{
+    case PROPOSAL_STATE_UNKNOWN = 'PROPOSAL_STATE_UNKNOWN';
+    case PROPOSAL_STATE_OPEN = 'PROPOSAL_STATE_OPEN';
+    case PROPOSAL_STATE_MERGED = 'PROPOSAL_STATE_MERGED';
+    case PROPOSAL_STATE_CLOSED = 'PROPOSAL_STATE_CLOSED';
+}

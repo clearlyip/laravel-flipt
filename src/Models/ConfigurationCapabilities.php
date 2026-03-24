@@ -8,6 +8,21 @@ readonly class ConfigurationCapabilities
         public ConfigurationCapabilityCacheInvalidation $cacheInvalidation,
         public ConfigurationCapabilityFlagEvaluation $flagEvaluation,
     ) {
-        //
+    }
+
+    public static function fromArray(array $data): self
+    {
+        return new self(
+            cacheInvalidation: ConfigurationCapabilityCacheInvalidation::fromArray(
+                is_array($data['cacheInvalidation'] ?? null)
+                    ? $data['cacheInvalidation']
+                    : [],
+            ),
+            flagEvaluation: ConfigurationCapabilityFlagEvaluation::fromArray(
+                is_array($data['flagEvaluation'] ?? null)
+                    ? $data['flagEvaluation']
+                    : [],
+            ),
+        );
     }
 }

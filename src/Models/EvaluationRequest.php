@@ -17,29 +17,28 @@ readonly class EvaluationRequest implements Arrayable
         public ?string $requestId = null,
         public ?string $reference = null,
     ) {
-        //
     }
 
     /**
      * {@inheritDoc}
      */
+    #[\Override]
     public function toArray(): array
     {
         return [
             'flagKey' => $this->flagKey,
             'entityId' => $this->entityId,
-            'context' => array_map(
-                fn($value) => match (gettype($value)) {
-                    'string' => $value,
-                    'integer' => (string) $value,
-                    'double' => (string) $value,
-                    'boolean' => $value === true ? '1' : '0',
-                    default => throw new \DomainException(
-                        'Unsupported type: ' . gettype($value),
-                    ),
-                },
-                $this->context,
-            ),
+            'context' => array_map(static fn($value) => match (gettype(
+                $value,
+            )) {
+                'string' => $value,
+                'integer' => (string) $value,
+                'double' => (string) $value,
+                'boolean' => $value === true ? '1' : '0',
+                default => throw new \DomainException(
+                    'Unsupported type: ' . gettype($value),
+                ),
+            }, $this->context),
             'requestId' => $this->requestId,
             'reference' => $this->reference,
         ];

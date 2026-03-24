@@ -3,25 +3,28 @@
 namespace Clearlyip\LaravelFlipt;
 
 use BadMethodCallException;
-use Clearlyip\LaravelFlipt\Contracts\Response;
+use Clearlyip\LaravelFlipt\Flipt\ClientEvaluation;
+use Clearlyip\LaravelFlipt\Flipt\Environments;
 use Clearlyip\LaravelFlipt\Flipt\Evaluate;
+use Clearlyip\LaravelFlipt\Flipt\Flags;
+use Clearlyip\LaravelFlipt\Flipt\Internal;
 use Clearlyip\LaravelFlipt\Flipt\OpenFeature;
-use Clearlyip\LaravelFlipt\Models\BooleanResponse;
-use Clearlyip\LaravelFlipt\Models\ErrorResponse;
-use Clearlyip\LaravelFlipt\Models\VariantResponse;
-use DomainException;
-use Psr\Http\Client\ClientInterface;
-use Psr\Http\Message\ResponseInterface;
-use Illuminate\Cache\Repository;
-use GuzzleHttp\Psr7\Message;
-use Spatie\Cloneable\Cloneable;
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Psr7\Message;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Cache\Repository;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\ResponseInterface;
+use Spatie\Cloneable\Cloneable;
 
 /**
  * @property-read Evaluate $evaluate
  * @property-read OpenFeature $openfeature
+ * @property-read Internal $internal
+ * @property-read ClientEvaluation $clientevaluation
+ * @property-read Environments $environments
+ * @property-read Flags $flags
  */
 readonly class Flipt
 {
@@ -35,7 +38,6 @@ readonly class Flipt
         public ?bool $skipCache = false,
         public ClientInterface $client = new GuzzleClient(),
     ) {
-        //
     }
 
     public function __get($property)
@@ -43,8 +45,12 @@ readonly class Flipt
         return match ($property) {
             'evaluate' => new Evaluate($this),
             'openfeature' => new OpenFeature($this),
+            'internal' => new Internal($this),
+            'clientevaluation' => new ClientEvaluation($this),
+            'environments' => new Environments($this),
+            'flags' => new Flags($this),
             default => throw new BadMethodCallException(
-                "Unknown property: $property",
+                "Unknown property: {$property}",
             ),
         };
     }
@@ -69,7 +75,9 @@ readonly class Flipt
      */
     public function getCacheTags(): array
     {
-        return config('flipt.cache.tags', ['flipt']);
+        /** @var array<string> $tags */
+        $tags = config('flipt.cache.tags', ['flipt']);
+        return $tags;
     }
 
     /**
@@ -94,7 +102,7 @@ readonly class Flipt
      */
     public function getCachePrefix(): string
     {
-        return config('flipt.cache.prefix', 'flipt');
+        return (string) config('flipt.cache.prefix', 'flipt');
     }
 
     /**
@@ -109,37 +117,11 @@ readonly class Flipt
         return (int) config('flipt.cache.ttl', 60);
     }
 
-    /**
-     * Map an array to a class using valinor
-     *
-     * @template T of object
-     *
-     * @param class-string<T> $signature
-     * @return T
-     */
-    public function map(string $signature, array $source)
+    public function map(string $signature, array $source): object
     {
-        return new \CuyZ\Valinor\MapperBuilder()
-            /** @return class-string<BooleanResponse|VariantResponse|ErrorResponse> */
-            ->infer(
-                Response::class,
-                fn(string $type) => match ($type) {
-                    'BOOLEAN_EVALUATION_RESPONSE_TYPE'
-                        => BooleanResponse::class,
-                    'VARIANT_EVALUATION_RESPONSE_TYPE'
-                        => VariantResponse::class,
-                    'ERROR_EVALUATION_RESPONSE_TYPE' => ErrorResponse::class,
-                    default => throw new DomainException(
-                        "Unhandled type `$type`.",
-                    ),
-                },
-            )
-            ->allowSuperfluousKeys()
-            ->mapper()
-            ->map(
-                $signature,
-                \CuyZ\Valinor\Mapper\Source\Source::array($source),
-            );
+        /** @var object $mapped */
+        $mapped = $signature::fromArray($source);
+        return $mapped;
     }
 
     /**
@@ -153,6 +135,12 @@ readonly class Flipt
      *
      * @return ResponseInterface The response from the Flipt API
      */
+    /**
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
+     */
     public function apiRequest(
         string $path,
         string $method = 'GET',
@@ -160,10 +148,11 @@ readonly class Flipt
         ?array $headers = [],
         ?array $cacheTags = [],
     ): ResponseInterface {
+        /** @var array<string, string|null> $headers */
         $headers = [
             'Accept' => 'application/json',
             'X-Flipt-Environment' => $this->environment,
-            ...$headers,
+            ...($headers ?? []),
         ];
 
         $request = new Request($method, $this->host . $path);
@@ -176,18 +165,25 @@ readonly class Flipt
         }
 
         foreach ($headers as $key => $value) {
-            $request = $request->withHeader($key, $value);
+            $request = $request->withHeader($key, (string) $value);
         }
 
         if (!$this->shouldCache()) {
             return $this->client->sendRequest($request);
         }
 
-        $response = null;
+        $cache = $this->cache;
+        if ($cache === null) {
+            return $this->client->sendRequest($request);
+        }
+
+        $cacheTags ??= [];
         $cacheKey = $this->getCachePrefix() . sha1(Message::toString($request));
-        $cachedResponse = $this->cache
-            ->tags([...$this->getCacheTags(), ...$cacheTags])
-            ->get($cacheKey);
+        /** @var string|null $cachedResponse */
+        $cachedResponse = $cache->tags([
+            ...$this->getCacheTags(),
+            ...$cacheTags,
+        ])->get($cacheKey);
 
         if (!$this->skipCache && $cachedResponse !== null) {
             return Message::parseResponse($cachedResponse);
@@ -196,13 +192,11 @@ readonly class Flipt
         // execute request
         $response = $this->client->sendRequest($request);
 
-        $this->cache
-            ->tags([...$this->getCacheTags(), ...$cacheTags])
-            ->put(
-                $cacheKey,
-                Message::toString($response),
-                $this->getCacheTTL(),
-            );
+        $cache->tags([...$this->getCacheTags(), ...$cacheTags])->put(
+            $cacheKey,
+            Message::toString($response),
+            $this->getCacheTTL(),
+        );
 
         return $response;
     }
@@ -216,11 +210,13 @@ readonly class Flipt
      */
     public function decodeResponse(ResponseInterface $response): array
     {
-        return json_decode(
-            $response->getBody(),
+        /** @var array<string, mixed>|null $decoded */
+        $decoded = json_decode(
+            (string) $response->getBody(),
             true,
             512,
             JSON_THROW_ON_ERROR,
         );
+        return $decoded ?? [];
     }
 }
