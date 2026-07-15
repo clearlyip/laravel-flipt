@@ -35,6 +35,7 @@ readonly class EvaluationRequest implements Arrayable
                 'integer' => (string) $value,
                 'double' => (string) $value,
                 'boolean' => $value === true ? '1' : '0',
+                'NULL' => null,
                 default => throw new \DomainException(
                     'Unsupported type: ' . gettype($value),
                 ),

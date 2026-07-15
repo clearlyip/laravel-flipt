@@ -1,6 +1,5 @@
 <?php
 
-use BadMethodCallException;
 use Clearlyip\LaravelFlipt\Flipt;
 use Clearlyip\LaravelFlipt\Flipt\ClientEvaluation;
 use Clearlyip\LaravelFlipt\Flipt\Environments;
