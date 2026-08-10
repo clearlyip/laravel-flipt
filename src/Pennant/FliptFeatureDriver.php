@@ -16,8 +16,11 @@ use Clearlyip\LaravelFlipt\Models\VariantResponse;
 use Exception;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use JsonException;
 use Laravel\Pennant\Contracts\DefinesFeaturesExternally;
 use Laravel\Pennant\Contracts\Driver;
+use Psr\Http\Client\ClientExceptionInterface;
 
 class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 {
@@ -41,8 +44,10 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
      * {@inheritDoc}
      *
      * Returns the keys of all flags defined in the configured Flipt namespace.
-     * @throws \Psr\Http\Client\ClientExceptionInterface
-     * @throws \ValueError
+     *
+     * If Flipt cannot be reached or returns an unparseable response, this
+     * degrades gracefully to an empty list (treated as "all features off")
+     * rather than propagating an exception and taking down the request.
      * @throws \Psr\SimpleCache\InvalidArgumentException
      * @throws \InvalidArgumentException
      * @throws \BadMethodCallException
@@ -50,7 +55,16 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
     #[\Override]
     public function defined(): array
     {
-        $list = $this->client->flags->list();
+        try {
+            $list = $this->client->flags->list();
+        } catch (JsonException|ClientExceptionInterface|\ValueError $e) {
+            Log::warning('Unable to list Flipt features', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
 
         return array_map(
             static fn(FlagDefinition $flag) => $flag->key,
@@ -60,9 +74,10 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
-     * @throws Exception
-     * @throws \JsonException
-     * @throws \Psr\Http\Client\ClientExceptionInterface
+     *
+     * If Flipt cannot be reached or returns an unparseable response, the
+     * input features are returned unchanged (safe default / all features off)
+     * rather than propagating an exception.
      * @throws \ValueError
      * @throws \Psr\SimpleCache\InvalidArgumentException
      * @throws \InvalidArgumentException
@@ -70,6 +85,35 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
      */
     #[\Override]
     public function getAll(array $features): array
+    {
+        try {
+            return $this->resolveAll($features);
+        } catch (JsonException|ClientExceptionInterface $e) {
+            Log::warning('Unable to evaluate Flipt features', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return $features;
+        }
+    }
+
+    /**
+     * Resolves every requested feature via a single Flipt batch call and
+     * returns the resolved values keyed by feature and scope index.
+     *
+     * @param array<string, array<int, mixed>> $features
+     *
+     * @return array<string, array<int, mixed>>
+     * @throws \JsonException
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws Exception
+     * @throws \ValueError
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     * @throws \InvalidArgumentException
+     * @throws \BadMethodCallException
+     */
+    private function resolveAll(array $features): array
     {
         $requests = Collection::make($features)->map(fn(
             $scopes,
@@ -120,9 +164,10 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
 
     /**
      * {@inheritDoc}
-     * @throws Exception
-     * @throws \JsonException
-     * @throws \Psr\Http\Client\ClientExceptionInterface
+     *
+     * If Flipt cannot be reached, returns an unparseable response, or returns
+     * no evaluation for the feature, the feature is treated as "off" (null)
+     * rather than propagating an exception.
      * @throws \ValueError
      * @throws \Psr\SimpleCache\InvalidArgumentException
      * @throws \InvalidArgumentException
@@ -131,31 +176,36 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
     #[\Override]
     public function get(string $feature, mixed $scope): mixed
     {
-        $responses = $this->client->evaluate->batch([
-            $this->makeEvaluationRequest(
-                feature: $feature,
-                scope: $scope,
-            ),
-        ])->responses;
+        try {
+            $responses = $this->client->evaluate->batch([
+                $this->makeEvaluationRequest(
+                    feature: $feature,
+                    scope: $scope,
+                ),
+            ])->responses;
 
-        $response = $responses[0] ?? null;
+            $response = $responses[0] ?? null;
 
-        if ($response instanceof ErrorResponse) {
-            return $this->getValueFromType($response->errorResponse);
+            return match (true) {
+                $response instanceof ErrorResponse
+                    => $this->getValueFromType($response->errorResponse),
+                $response instanceof BooleanResponse
+                    => $this->getValueFromType($response->booleanResponse),
+                $response instanceof VariantResponse
+                    => $this->getValueFromType($response->variantResponse),
+                $response === null => null,
+                default => throw new Exception(
+                    'Unknown response type: ' . get_class($response),
+                ),
+            };
+        } catch (JsonException|ClientExceptionInterface $e) {
+            Log::warning("Unable to evaluate Flipt feature '{$feature}'", [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
         }
-
-        if ($response instanceof BooleanResponse) {
-            return $this->getValueFromType($response->booleanResponse);
-        }
-
-        if ($response instanceof VariantResponse) {
-            return $this->getValueFromType($response->variantResponse);
-        }
-
-        throw new Exception(
-            'Unknown response type: '
-            . ($response !== null ? get_class($response) : 'null'),
-        );
     }
 
     /**
@@ -200,10 +250,7 @@ class FliptFeatureDriver implements Driver, DefinesFeaturesExternally
     public function purge(?array $features): void
     {
         if ($this->client->shouldCache() && $this->client->cache !== null) {
-            $this->client
-                ->cache
-                ->tags($this->client->getCacheTags())
-                ->flush();
+            $this->client->cache->tags($this->client->getCacheTags())->flush();
         }
     }
 

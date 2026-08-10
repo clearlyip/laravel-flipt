@@ -35,11 +35,9 @@ describe('EvaluationRequest', function () {
     });
 
     it('throws for unsupported context value types', function () {
-        $request = new EvaluationRequest(
-            'flag',
-            'entity-1',
-            ['obj' => new stdClass()],
-        );
+        $request = new EvaluationRequest('flag', 'entity-1', [
+            'obj' => new stdClass(),
+        ]);
         $request->toArray();
     })->throws(\DomainException::class);
 

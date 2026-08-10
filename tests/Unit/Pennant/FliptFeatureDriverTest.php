@@ -1,7 +1,11 @@
 <?php
 
 use Clearlyip\LaravelFlipt\Pennant\FliptFeatureDriver;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Contracts\Events\Dispatcher;
+use Psr\Http\Client\ClientInterface;
 
 function makeDriver(array $responses = []): FliptFeatureDriver
 {
@@ -244,6 +248,73 @@ describe('FliptFeatureDriver::defined', function () {
         ])]);
 
         expect($driver->defined())->toBe([]);
+    });
+});
+
+describe('FliptFeatureDriver resilience', function () {
+    it('defined() returns an empty array when Flipt returns a non-JSON response', function () {
+        $driver = makeDriver([new Response(
+            502,
+            [],
+            '<html>Bad Gateway</html>',
+        )]);
+
+        expect($driver->defined())->toBe([]);
+    });
+
+    it('defined() returns an empty array when Flipt is unreachable', function () {
+        $mock = Mockery::mock(ClientInterface::class);
+        $mock
+            ->shouldReceive('sendRequest')
+            ->once()
+            ->andThrow(
+                new ConnectException(
+                    'Connection refused',
+                    new Request(
+                        'GET',
+                        'http://localhost:8080/api/v1/namespaces/default/flags',
+                    ),
+                ),
+            );
+
+        $flipt = new \Clearlyip\LaravelFlipt\Flipt(
+            host: 'http://localhost:8080',
+            namespace: 'default',
+            environment: 'test',
+            client: $mock,
+        );
+        $driver = new FliptFeatureDriver(
+            $flipt,
+            Mockery::mock(Dispatcher::class),
+        );
+
+        expect($driver->defined())->toBe([]);
+    });
+
+    it('get() returns null instead of throwing when Flipt returns a non-JSON response', function () {
+        $driver = makeDriver([new Response(502, [], 'upstream error')]);
+        $scope = (object) ['id' => 'user-1', 'email' => '[EMAIL]'];
+
+        expect($driver->get('my-flag', $scope))->toBeNull();
+    });
+
+    it('get() returns null when Flipt returns no evaluation responses', function () {
+        $driver = makeDriver([jsonResponse([
+            'requestId' => 'batch-1',
+            'requestDurationMillis' => 0.5,
+            'responses' => [],
+        ])]);
+        $scope = (object) ['id' => 'user-1', 'email' => '[EMAIL]'];
+
+        expect($driver->get('my-flag', $scope))->toBeNull();
+    });
+
+    it('getAll() returns features unchanged when Flipt returns a non-JSON response', function () {
+        $driver = makeDriver([new Response(503, [], 'Service Unavailable')]);
+        $scope = (object) ['id' => 'user-1', 'email' => '[EMAIL]'];
+        $features = ['my-flag' => [0 => $scope]];
+
+        expect($driver->getAll($features))->toBe($features);
     });
 });
 

@@ -57,8 +57,7 @@ function resourceData(): array
 
 describe('Environments::list', function () {
     it('returns a ListEnvironmentsResponse', function () {
-        $flipt = makeFliptClient([jsonResponse(['environments' =>
-            [environmentData()]])]);
+        $flipt = makeFliptClient([jsonResponse(['environments' => [environmentData()]])]);
 
         $result = $flipt->environments->list();
 
@@ -70,8 +69,10 @@ describe('Environments::list', function () {
 
     it('calls GET /api/v2/environments', function () {
         $captured = [];
-        $flipt = makeFliptClient([jsonResponse(['environments' =>
-            []])], $captured);
+        $flipt = makeFliptClient(
+            [jsonResponse(['environments' => []])],
+            $captured,
+        );
 
         $flipt->environments->list();
 
@@ -82,8 +83,7 @@ describe('Environments::list', function () {
 
 describe('Environments::listBranches', function () {
     it('returns a ListEnvironmentBranchesResponse', function () {
-        $flipt = makeFliptClient([jsonResponse(['branches' =>
-            [branchData()]])]);
+        $flipt = makeFliptClient([jsonResponse(['branches' => [branchData()]])]);
 
         $result = $flipt->environments->listBranches('production');
 

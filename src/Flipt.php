@@ -14,6 +14,10 @@ use GuzzleHttp\Psr7\Message;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Cache\Repository;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use JsonException;
+use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\ResponseInterface;
 use Spatie\Cloneable\Cloneable;
@@ -179,44 +183,199 @@ readonly class Flipt
 
         $cacheTags ??= [];
         $cacheKey = $this->getCachePrefix() . sha1(Message::toString($request));
-        /** @var string|null $cachedResponse */
-        $cachedResponse = $cache->tags([
+
+        return $this->resolveWithCache($request, $cache, $cacheTags, $cacheKey);
+    }
+
+    /**
+     * Resolves a request through the Flipt cache, serving fresh entries
+     * immediately, revalidating stale entries on a throttled cadence, and
+     * falling back to a stale response when Flipt is unreachable.
+     *
+     * @param \GuzzleHttp\Psr7\Request $request The request to send.
+     * @param \Illuminate\Cache\Repository $cache The cache repository.
+     * @param array $cacheTags Additional cache tags.
+     * @param string $cacheKey The cache key for the request.
+     *
+     * @return ResponseInterface The response from the Flipt API
+     * @throws \Psr\Http\Client\ClientExceptionInterface
+     * @throws \Psr\SimpleCache\InvalidArgumentException
+     */
+    private function resolveWithCache(
+        Request $request,
+        Repository $cache,
+        array $cacheTags,
+        string $cacheKey,
+    ): ResponseInterface {
+        /** @var array{response: string, timestamp: int, revalidated_at: int|null}|null $stored */
+        $stored = $cache->tags([
             ...$this->getCacheTags(),
             ...$cacheTags,
         ])->get($cacheKey);
 
-        if (!$this->skipCache && $cachedResponse !== null) {
-            return Message::parseResponse($cachedResponse);
+        if (!$this->skipCache && is_array($stored)) {
+            $cached = Message::parseResponse((string) $stored['response']);
+
+            // Serve the cached response immediately while it is still fresh.
+            if (((int) $stored['timestamp'] + $this->getCacheTTL()) > time()) {
+                return $cached;
+            }
+
+            // Stale: throttle revalidation so a down Flipt isn't hammered on
+            // every request. Only try to refresh once per TTL window, serving
+            // the stale response in between.
+            $lastCheck = (int) ($stored['revalidated_at'] ?? 0);
+            if (($lastCheck + $this->getCacheTTL()) > time()) {
+                return $cached;
+            }
+
+            $now = time();
+
+            try {
+                $fresh = $this->client->sendRequest($request);
+            } catch (ClientExceptionInterface $e) {
+                $this->markRevalidated(
+                    $cache,
+                    $cacheTags,
+                    $cacheKey,
+                    $stored,
+                    $now,
+                );
+
+                return $cached;
+            }
+
+            if ($this->isSuccess($fresh)) {
+                $this->putInCache($cache, $cacheTags, $cacheKey, $fresh, $now);
+
+                return $fresh;
+            }
+
+            $this->markRevalidated(
+                $cache,
+                $cacheTags,
+                $cacheKey,
+                $stored,
+                $now,
+            );
+
+            return $cached;
         }
 
-        // execute request
+        // No usable cached response: perform the request directly.
         $response = $this->client->sendRequest($request);
 
-        $cache->tags([...$this->getCacheTags(), ...$cacheTags])->put(
-            $cacheKey,
-            Message::toString($response),
-            $this->getCacheTTL(),
-        );
+        if ($this->isSuccess($response)) {
+            $this->putInCache($cache, $cacheTags, $cacheKey, $response, time());
+        }
 
         return $response;
     }
 
     /**
+     * Returns whether the given response represents a successful result.
+     *
+     * Failed (non-2xx) responses are deliberately not cached so a transient
+     * Flipt blip never poisons an otherwise good cache entry.
+     */
+    private function isSuccess(ResponseInterface $response): bool
+    {
+        return (
+            $response->getStatusCode() >= 200
+            && $response->getStatusCode() < 300
+        );
+    }
+
+    /**
+     * Stores a successful response in the Flipt cache under the given key,
+     * retaining it indefinitely so it can be served as a stale fallback after
+     * its freshness window has lapsed.
+     *
+     * @param \Illuminate\Cache\Repository $cache The cache repository.
+     * @param array $cacheTags Additional cache tags.
+     * @param string $cacheKey The cache key for the response.
+     * @param ResponseInterface $response The successful response to cache.
+     * @param int $now The current unix timestamp.
+     */
+    private function putInCache(
+        Repository $cache,
+        array $cacheTags,
+        string $cacheKey,
+        ResponseInterface $response,
+        int $now,
+    ): void {
+        $cache->tags([
+            ...$this->getCacheTags(),
+            ...$cacheTags,
+        ])->put(
+            $cacheKey,
+            [
+                'response' => Message::toString($response),
+                'timestamp' => $now,
+                'revalidated_at' => $now,
+            ],
+            null,
+        );
+    }
+
+    /**
+     * Records that a revalidation attempt was made without overwriting the
+     * stored (stale) response, so the throttling window is respected.
+     *
+     * @param \Illuminate\Cache\Repository $cache The cache repository.
+     * @param array $cacheTags Additional cache tags.
+     * @param string $cacheKey The cache key for the response.
+     * @param array<string, mixed> $stored The currently stored response data.
+     * @param int $now The current unix timestamp.
+     */
+    private function markRevalidated(
+        Repository $cache,
+        array $cacheTags,
+        string $cacheKey,
+        array $stored,
+        int $now,
+    ): void {
+        $cache->tags([
+            ...$this->getCacheTags(),
+            ...$cacheTags,
+        ])->put(
+            $cacheKey,
+            [
+                ...$stored,
+                'revalidated_at' => $now,
+            ],
+            null,
+        );
+    }
+
+    /**
      * Decode the JSON response from the Flipt API into an associative array
+     *
+     * If the response body is not valid JSON, the failure is logged with the
+     * HTTP status and a snippet of the body for visibility, and the original
+     * {@see JsonException} is rethrown so callers can decide how to handle it.
      *
      * @param ResponseInterface $response The response from the Flipt API
      *
      * @return array The decoded response as an associative array
+     * @throws \JsonException If the response body is not valid JSON
      */
     public function decodeResponse(ResponseInterface $response): array
     {
-        /** @var array<string, mixed>|null $decoded */
-        $decoded = json_decode(
-            (string) $response->getBody(),
-            true,
-            512,
-            JSON_THROW_ON_ERROR,
-        );
+        $body = (string) $response->getBody();
+
+        try {
+            /** @var array<string, mixed>|null $decoded */
+            $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            Log::warning('Flipt response could not be decoded as JSON', [
+                'status' => $response->getStatusCode(),
+                'body' => Str::limit($body, 500),
+            ]);
+
+            throw $e;
+        }
+
         return $decoded ?? [];
     }
 }
